@@ -13,10 +13,8 @@ Endpoints:
 Common query parameters:
   ticker    str   default AAPL   Ticker symbol (letters, digits, . - ^ =)
   budget    float default 300    Available budget in EUR (informational)
-  period    str   default 1mo    Yahoo Finance period:   1d 5d 1mo 3mo 6mo
-                                   1y 2y 5y 10y ytd max
-  interval  str   default 1d     Yahoo Finance interval: 1m 2m 5m 15m 30m
-                                   60m 90m 1h 1d 5d 1wk 1mo 3mo
+  period    str   default 1mo    Yahoo Finance period:   1d 5d 1mo 3mo 6mo 1y 2y 5y 10y ytd max
+  interval  str   default 1d     Yahoo Finance interval: 1m 2m 5m 15m 30m 60m 90m 1h 1d 5d 1wk 1mo 3mo
 """
 
 import os
@@ -32,9 +30,9 @@ _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
 
-from backend.advisor.Sentiments import YahooSentiments
 import trading_strategy as TradingStrategy
 from trading_report import generate_report
+from sentiments import YahooSentiments
 
 app = Flask(__name__)
 

@@ -1,0 +1,15 @@
+pandas
+numpy
+yfinance
+mplfinance
+ipython
+transformers
+#required for transformers
+torch
+torchvision
+#pdf generation
+reportlab
+#api server
+flask
+#testing
+pytest

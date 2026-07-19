@@ -1,0 +1,43 @@
+@startuml
+!theme plain
+
+title Advisor Service - Main Processing Steps
+
+start
+
+:Receive API request\n(/api/strategies/run or \n /api/strategies/report);
+:Validate input\n(ticker, budget, period, interval);
+
+if (Inputs valid?) then (yes)
+  :Download OHLCV data\nfrom Yahoo Finance;
+  :Drop missing rows;
+
+  if (Enough bars and non-empty data?) then (yes)
+    :Compute ATR signal;
+    :Compute MA+RSI signal;
+
+    :Fetch Yahoo news;
+    :Run FinBERT sentiment analysis;
+    :Aggregate daily sentiment signal;
+
+    :Merge market data + sentiment\nusing date alignment;
+    :Build latest signal summary\n(JSON payload);
+
+    :Generate PDF trading report;
+
+    if (Endpoint is /report?) then (yes)
+      :Stream PDF file response;
+    else (no)
+      :Return JSON response\nwith signals + report path;
+    endif
+
+  else (no)
+    :Return error\n(insufficient or missing data);
+  endif
+
+else (no)
+  :Return validation error (400);
+endif
+
+stop
+@enduml

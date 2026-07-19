@@ -14,7 +14,8 @@ class YahooSentiments:
     print(hf_token)
     finbert = BertForSequenceClassification.from_pretrained('yiyanghkust/finbert-tone', num_labels=3, token=hf_token)
     tokenizer = BertTokenizer.from_pretrained('yiyanghkust/finbert-tone', token=hf_token)
-    nlp_pipe = pipeline("sentiment-analysis", model=finbert, tokenizer=tokenizer, token=hf_token, truncation=True)
+    nlp_pipe = pipeline("text-classification", model=finbert, tokenizer=tokenizer, token=hf_token, truncation=True)
+    
     def __init__(self):
         # Private instance variables
         self.__news_data = []

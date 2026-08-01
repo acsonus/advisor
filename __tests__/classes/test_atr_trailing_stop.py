@@ -1,9 +1,9 @@
 # ===========================================================================
 # 4.  ATR Trailing Stop
 # ===========================================================================
-from turtle import pd
-from advisor import ts
-from src.backend.advisor.utilities import ohlvc, make_ohlcv, uptrend, downtrend, v_shape, inverted_v, _assert_structure, _assert_valid_signals
+import pandas as pd
+import trading_strategy as ts
+from utilities.test_helpers import make_ohlcv, uptrend, downtrend, v_shape, inverted_v, assert_structure as _assert_structure, assert_valid_signals as _assert_valid_signals
 class TestAtrTrailingStop:
     """Tests for atr_trailing_stop()."""
         

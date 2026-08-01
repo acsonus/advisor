@@ -1,9 +1,9 @@
 # ===========================================================================
 # 5.  MACD Histogram Reversal
 # ===========================================================================
-from advisor import ts
-from src.backend.advisor.utilities import ohlvc, make_ohlcv, uptrend, downtrend, v_shape, inverted_v, sine_wave, _assert_structure, _assert_valid_sign
-from src.backend.advisor.utilities import _assert_valid_signals
+import pandas as pd
+import trading_strategy as ts
+from utilities.test_helpers import make_ohlcv, uptrend, downtrend, v_shape, inverted_v, sine_wave, assert_structure as _assert_structure, assert_valid_signals as _assert_valid_signals
 class TestMacdHistogramReversal:
     """Tests for macd_histogram_reversal_strategy()."""
 

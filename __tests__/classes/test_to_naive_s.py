@@ -3,7 +3,7 @@
 # 
 # ===========================================================================
 import pandas as pd
-from advisor import ts
+import trading_strategy as ts
 class TestToNaiveS:
     def test_tz_aware_utc_stripped(self):
         s = pd.Series(pd.date_range("2023-01-01", periods=5, freq="D", tz="UTC"))

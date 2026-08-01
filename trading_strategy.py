@@ -107,6 +107,8 @@ def downloadData(ticker_symbol: str = 'AAPL',
             )
 
     data = yf.download(ticker_symbol, period=period, interval=interval, auto_adjust=True)
+    if data is None:
+        raise ValueError(f"No data returned for ticker '{ticker_symbol}'")
 
     # Flatten MultiIndex columns produced when a single ticker is downloaded.
     if isinstance(data.columns, pd.MultiIndex):

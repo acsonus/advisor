@@ -1,7 +1,11 @@
-from  sentiments import YahooSentiments
+import sys
+import os
+from sentiments import YahooSentiments
+
 import trading_strategy as TradingStrategy
 import pandas as pd
 from pandas import DataFrame
+
 from trading_report import generate_report
 def runTest1():
     print("running test 1")

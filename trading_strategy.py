@@ -2,7 +2,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 import yfinance as yf
-#in jypiter notebooks it is already avaliable by default
+#in Jupyter notebooks it is already available by default on a platforms like Google
 from IPython.display import display
 
 

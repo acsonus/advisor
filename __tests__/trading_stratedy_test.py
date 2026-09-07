@@ -104,7 +104,7 @@ def test2():
     mpf.make_addplot(atr_buy_1h,  type='scatter', markersize=80, marker='^', color='green',  label='ATR Buy'),
     mpf.make_addplot(atr_sell_1h, type='scatter', markersize=80, marker='v', color='red',    label='ATR Sell'),
     mpf.make_addplot(ma_buy_1h,   type='scatter', markersize=80, marker='^', color='lime',   label='MA Buy'),
-    mpf.make_addplot(ma_sell_1h,  type='scatter', markersize=80, marker='v', color ='orange', label='MA Sell'),
+    mpf.make_addplot(ma_sell_1h,  type='scatter', markersize=80, marker='v', color = 'orange', label='MA Sell'),
     
     ]
     #plot training data

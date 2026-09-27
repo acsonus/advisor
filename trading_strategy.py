@@ -64,7 +64,9 @@ def news_sentiment_signal(df_news: pd.DataFrame,
     Returns DataFrame indexed by Date with columns: ['daily_sentiment', 'Signal']
     """
     if df_news.empty or 'Signed_Score' not in df_news.columns:
-        return pd.DataFrame(columns=['daily_sentiment', 'Signal'])
+        # Index must be named 'Date' so downstream merge_asof(on="Date") calls
+        # can reset_index() and find a 'Date' column even with no news rows.
+        return pd.DataFrame(columns=['daily_sentiment', 'Signal'], index=pd.Index([], name='Date'))
 
     daily = (
         df_news.groupby('Date')['Signed_Score']

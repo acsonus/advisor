@@ -8,18 +8,12 @@ import mplfinance as mpf
 from pandas import DataFrame
 from pathlib import Path
 
-
-
-#code to include files from parent directory
-_root = Path(__file__).parent.parent  # advisor/
-for _p in [_root, _root.parent]:      # advisor/, Projects/
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
 #Module dependent files to be included        
 from sentiments import YahooSentiments
 import trading_strategy as TradingStrategy
 from trading_report import generate_report
-#downlad data for a given ticker and period. Runs through all stratagies and give a recommendations. Current test is for APPL and for 1 day period
+
+#download data for a given ticker and period. Runs through all strategies and give a recommendations.
 def test1():
     print("running test 1")
     ticker = 'AAPL'
@@ -42,9 +36,8 @@ def test1():
     # Align datetime resolution — strip tz from intraday (tz-aware) and normalise to datetime64[s]
     data_reset['Date'] = TradingStrategy.to_naive_s(data_reset['Date'])
     sentiment_reset = sentiment_df.reset_index().rename(columns={'Signal': 'sentiment_signal'})
-    sentiment_reset['Date'] = TradingStrategy.to_naive_s(sentiment_reset['Date'])
-    merged = pd.merge_asof(
-        data_reset.sort_values('Date'),
+    sentiment_reset['Date'] = TradingStrategy.to_naive_s(sentiment_reset['Date']) 
+    merged = pd.merge_asof(data_reset.sort_values('Date'),
         sentiment_reset.sort_values('Date'),
         on='Date',
         direction='backward'  # assign most-recent sentiment to each bar (works for both daily and intraday)
@@ -52,9 +45,6 @@ def test1():
     data = merged.set_index('Date')
     #data['sentiment_signal'] = data['sentiment_signal'].fillna('Hold')
     data['daily_sentiment'] = data['daily_sentiment'].fillna(0.0)
-
-    print(data)
-
     print("Test finished")
     
 def test2():

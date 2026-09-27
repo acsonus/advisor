@@ -13,7 +13,7 @@ Endpoints:
 Common query parameters:
   ticker    str   default AAPL   Ticker symbol (letters, digits, . - ^ =)
   budget    float default 300    Available budget in EUR (informational)
-  period    str   default 1mo    Yahoo Finance period:   1d 5d 1mo 3mo 6mo 1y 2y 5y 10y ytd max
+  period    str   default 3mo    Yahoo Finance period:   1d 5d 1mo 3mo 6mo 1y 2y 5y 10y ytd max
   interval  str   default 1d     Yahoo Finance interval: 1m 2m 5m 15m 30m 60m 90m 1h 1d 5d 1wk 1mo 3mo
 """
 
@@ -218,7 +218,7 @@ def run_strategies():
     Query params:
       ticker    (str,   default "AAPL")  ticker symbol
       budget    (float, default 300)     budget in EUR
-      period    (str,   default "1mo")   Yahoo Finance period
+      period    (str,   default "3mo")   Yahoo Finance period
       interval  (str,   default "1d")    Yahoo Finance interval
       
       VALID_PERIODS   = {'1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max'}
@@ -230,7 +230,7 @@ def run_strategies():
     except ValueError:
         abort(400, description="'budget' must be a number.")
 
-    period   = request.args.get("period",   "1mo").strip()
+    period   = request.args.get("period",   "3mo").strip()
     interval = request.args.get("interval", "1d").strip()
 
     if period not in TradingStrategy.VALID_PERIODS:
@@ -271,7 +271,7 @@ def download_report():
     Query params:
       ticker    (str,   default "AAPL")  ticker symbol
       budget    (float, default 300)     budget in EUR
-      period    (str,   default "1mo")   Yahoo Finance period
+      period    (str,   default "3mo")   Yahoo Finance period
       interval  (str,   default "1d")    Yahoo Finance interval
     """
     ticker = request.args.get("ticker", "AAPL").upper().strip()
@@ -280,7 +280,7 @@ def download_report():
     except ValueError:
         abort(400, description="'budget' must be a number.")
 
-    period   = request.args.get("period",   "1mo").strip()
+    period   = request.args.get("period",   "3mo").strip()
     interval = request.args.get("interval", "1d").strip()
 
     if period not in TradingStrategy.VALID_PERIODS:

@@ -18,7 +18,7 @@ def convert_index_to_athens(df):
     out.index = out.index.tz_convert(ZoneInfo("Europe/Athens"))
     return out
 
-#to much noise in signals tests should proceed only on hour interval data
+# Too much noise in signals; tests should proceed only on hour interval data
 def identify_gap_fills(df, min_volume=None):
     """
     df requires columns: 'Open', 'High', 'Low', 'Close', and optionally 'Volume'
@@ -26,8 +26,7 @@ def identify_gap_fills(df, min_volume=None):
     """
     df = df.copy()
     
-    # 1. Calculate Gap: Today's Open vs. Yesterday's Close
-    
+    # 1. Calculate Gap: Today's / Current Bar's Open vs. Previous Bar's Close
     df['Prev_Close'] = df['Close'].shift(1)
     df['Gap_Size'] = df['Open'] - df['Prev_Close']
     
@@ -35,9 +34,9 @@ def identify_gap_fills(df, min_volume=None):
     df['Gap_Type'] = np.where(df['Gap_Size'] > 0, 'Up', 
                              np.where(df['Gap_Size'] < 0, 'Down', 'None'))
 
-    # 3. Same-Day Fill Logic
-    # Gap Up fills if Today's Low drops to Yesterday's Close
-    # Gap Down fills if Today's High rises to Yesterday's Close
+    # 3. Same-Day / Same-Bar Fill Logic
+    # Gap Up fills if Low drops to Previous Close
+    # Gap Down fills if High rises to Previous Close
     df['Filled'] = False
     df.loc[(df['Gap_Type'] == 'Up') & (df['Low'] <= df['Prev_Close']), 'Filled'] = True
     df.loc[(df['Gap_Type'] == 'Down') & (df['High'] >= df['Prev_Close']), 'Filled'] = True
@@ -50,9 +49,14 @@ def identify_gap_fills(df, min_volume=None):
 
 # Example Usage: Download real data from yfinance
 
-# Download historical data
+# Download historical data (1h interval)
 ticker = "AAPL"
-df = yf.download(ticker, start="2026-05-19", end="2026-05-21", progress=False, interval='30m')  # Using 30-minute interval for more granular analysis
+start_date = "2026-05-01"
+end_date = "2026-05-21"
+interval = "1h"
+
+df = yf.download(ticker, start=start_date, end=end_date, progress=False, interval=interval)
+
 # Flatten MultiIndex columns returned by newer yfinance versions
 if isinstance(df.columns, pd.MultiIndex):
     df.columns = df.columns.get_level_values(0)
@@ -66,22 +70,24 @@ print(result)
 
 # --- Chart ---
 # Build addplot markers for filled gaps
-#filled_up   = result['Close'].where((result['Gap_Type'] == 'Up')   & result['Filled'])
-#filled_down = result['Close'].where((result['Gap_Type'] == 'Down') & result['Filled'])
+filled_up   = result['Low'].where((result['Gap_Type'] == 'Up')   & result['Filled'])
+filled_down = result['High'].where((result['Gap_Type'] == 'Down') & result['Filled'])
 
-# apds = [
-#     mpf.make_addplot(filled_up,   type='scatter', markersize=60, marker='^', color='green'),
-#     mpf.make_addplot(filled_down, type='scatter', markersize=60, marker='v', color='red'),
-# ]
+apds = []
+if filled_up.notna().any():
+    apds.append(mpf.make_addplot(filled_up, type='scatter', markersize=60, marker='^', color='green'))
+if filled_down.notna().any():
+    apds.append(mpf.make_addplot(filled_down, type='scatter', markersize=60, marker='v', color='red'))
 
 mpf.plot(
     result[['Open', 'High', 'Low', 'Close', 'Volume']],
     type='candle',
     style='charles',
-    title=f'{ticker} – Gap Fills 2026-05-19 to 2026-05-21 (30m)',
+    title=f'{ticker} – Gap Fills {start_date} to {end_date} ({interval})',
     ylabel='Price (USD)',
     volume=True,
-    #addplot=apds,
+    addplot=apds if apds else None,
     figsize=(16, 8),
     show_nontrading=False,
 )
+

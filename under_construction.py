@@ -6,7 +6,17 @@ from zoneinfo import ZoneInfo
 
 
 def convert_index_to_athens(df):
-    """Return a copy with DatetimeIndex converted to Europe/Athens."""
+    """
+    Goal:
+        Convert DataFrame DatetimeIndex to the Europe/Athens timezone.
+
+    Execution Principle:
+        1. Create an isolated copy of the input DataFrame.
+        2. Check if the index is a `pd.DatetimeIndex`; if not, return unmodified copy.
+        3. If timezone is naive, localize index to UTC.
+        4. Convert localized timestamps to `Europe/Athens` using `ZoneInfo`.
+        5. Return DataFrame with updated DatetimeIndex.
+    """
     out = df.copy()
     if not isinstance(out.index, pd.DatetimeIndex):
         return out
@@ -21,8 +31,18 @@ def convert_index_to_athens(df):
 # Too much noise in signals; tests should proceed only on hour interval data
 def identify_gap_fills(df, min_volume=None):
     """
-    df requires columns: 'Open', 'High', 'Low', 'Close', and optionally 'Volume'
-    min_volume: minimum volume threshold to filter gaps (optional)
+    Goal:
+        Detect opening price gaps between consecutive bars and evaluate whether the gap was filled during the bar.
+
+    Execution Principle:
+        1. Calculate previous bar close using `df['Close'].shift(1)`.
+        2. Compute gap size: `Gap_Size = Open - Prev_Close`.
+        3. Classify gap type: 'Up' if Gap_Size > 0, 'Down' if Gap_Size < 0, else 'None'.
+        4. Detect fills:
+           - Gap Up fills if bar `Low <= Prev_Close`.
+           - Gap Down fills if bar `High >= Prev_Close`.
+        5. Apply optional volume filter: if `min_volume` is provided, reset `Filled` to False for low-volume bars.
+        6. Return annotated DataFrame with Gap_Size, Gap_Type, and Filled columns.
     """
     df = df.copy()
     

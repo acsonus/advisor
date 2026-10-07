@@ -10,7 +10,12 @@ from advisor.strategies.base import BaseStrategy
 
 @dataclass
 class AtrTrailingStopStrategy(BaseStrategy):
-    """Average True Range (ATR) dynamic trailing stop strategy."""
+    """
+    Average True Range (ATR) dynamic trailing stop strategy.
+
+    Uses market volatility (ATR) to size adaptive trailing stops that follow
+    trending price moves while locking in gains and managing drawdown.
+    """
 
     name: ClassVar[str] = "atr_trailing_stop"
     description: ClassVar[str] = "Average True Range (ATR) dynamic trailing stop"
@@ -19,6 +24,53 @@ class AtrTrailingStopStrategy(BaseStrategy):
     atr_multiplier: float = 2.0
 
     def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Compute Average True Range and simulate dynamic volatility-based trailing stop exits.
+
+        Goal:
+        -----
+        Identify volatility-expanded directional breakouts and protect long/short positions
+        using adaptive trailing stop levels calculated from multiples of the ATR.
+
+        Execution Principle:
+        --------------------
+        1. Copy Input:
+           Creates a shallow copy `df = data.copy()` to preserve original caller data.
+        2. Compute True Range (TR):
+           Evaluates the maximum of three components across each bar:
+           - High - Low (`H-L`)
+           - Absolute value of High - Previous Close (`|H - Close[i-1]|`)
+           - Absolute value of Low - Previous Close (`|L - Close[i-1]|`)
+           `TR = max(H-L, H-PC, L-PC)`.
+        3. Compute Average True Range (ATR):
+           Applies exponential weighted moving average (`ewm`) with `span=atr_period` on TR.
+        4. State Tracking Loop:
+           Iterates through bars sequentially tracking active position (`long_position`, `short_position`):
+           - In Flat state:
+             * Triggers Buy if `Close[i] > Close[i-1]` and price surge exceeds `(ATR * atr_multiplier / 2)`.
+               Initializes `Buy_Stop = Close - (ATR * atr_multiplier)`.
+             * Triggers Sell if `Close[i] < Close[i-1]` and price drop exceeds `(ATR * atr_multiplier / 2)`.
+               Initializes `Sell_Stop = Close + (ATR * atr_multiplier)`.
+           - In Long position:
+             * Ratchets `Buy_Stop` upward: `new_stop = Close - (ATR * multiplier)`.
+               Guards against NaN on entry, ensuring stop only moves higher: `max(prev_stop, new_stop)`.
+             * If `Close[i] < Buy_Stop[i]`: Stop hit -> exit long position with a `'Sell'` signal.
+           - In Short position:
+             * Ratchets `Sell_Stop` downward: `min(prev_stop, new_stop)`.
+             * If `Close[i] > Sell_Stop[i]`: Stop hit -> exit short position with a `'Buy'` signal.
+        5. Output:
+           Returns DataFrame with columns `['Close', 'ATR', 'Buy_Stop', 'Sell_Stop', 'Signal']`.
+
+        Parameters:
+        -----------
+        data : pd.DataFrame
+            OHLCV DataFrame containing 'High', 'Low', and 'Close' columns.
+
+        Returns:
+        --------
+        pd.DataFrame
+            Indicator columns and generated signals.
+        """
         df = data.copy()
 
         # Calculate True Range (TR)
@@ -83,5 +135,30 @@ class AtrTrailingStopStrategy(BaseStrategy):
 
 
 def atr_trailing_stop(data: pd.DataFrame, atr_period: int = 14, atr_multiplier: float = 2.0) -> pd.DataFrame:
-    """Backward-compatible function wrapper for ATR trailing stop strategy."""
+    """
+    Functional wrapper for the ATR Trailing Stop strategy.
+
+    Goal:
+    -----
+    Maintain full backward compatibility with functional test suites and existing scripts.
+
+    Execution Principle:
+    --------------------
+    Constructs an `AtrTrailingStopStrategy` dataclass instance with the provided parameters
+    and invokes its `generate_signals` method.
+
+    Parameters:
+    -----------
+    data : pd.DataFrame
+        OHLCV market price bars.
+    atr_period : int, default 14
+        Lookback span for exponential ATR smoothing.
+    atr_multiplier : float, default 2.0
+        Multiplier applied to ATR for distance of trailing stops.
+
+    Returns:
+    --------
+    pd.DataFrame
+        Strategy output with indicator columns and signals.
+    """
     return AtrTrailingStopStrategy(atr_period=atr_period, atr_multiplier=atr_multiplier).generate_signals(data)

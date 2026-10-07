@@ -18,7 +18,19 @@ from advisor.strategies import atr_trailing_stop, ma_rsi_strategy
 
 @pytest.mark.live
 def test_visual_pipeline_smoke():
-    """Runs through all strategies and sentiment mapping."""
+    """
+    Goal:
+        Validate the complete real-data ingestion, sentiment analysis, strategy calculation,
+        and as-of timestamp merging pipeline using live market feeds for AAPL.
+
+    Execution Principle:
+        1. Fetch 1 month of daily OHLCV bars for AAPL via `download_data`.
+        2. Fetch recent Yahoo Finance headlines and evaluate FinBERT sentiments.
+        3. Evaluate ATR trailing stop and MA-RSI strategies over the bars.
+        4. Normalize datetime indices to naive UTC timestamps via `to_naive_s`.
+        5. Merge sentiment scores onto OHLCV bars using backward `merge_asof`.
+        6. Verify resulting unified dataset is non-empty and properly populated.
+    """
     ticker = 'AAPL'
     data = download_data(ticker, period="1mo", interval="1d")
 
@@ -48,7 +60,18 @@ def test_visual_pipeline_smoke():
 
 @pytest.mark.live
 def test_visual_multi_timeframe_plot():
-    """Generates candle charts across multiple timeframes without blocking."""
+    """
+    Goal:
+        Verify candlestick rendering and multi-timeframe strategy generation across 1h
+        and 15m intervals without blocking headless test runners.
+
+    Execution Principle:
+        1. Ingest multi-frequency historical bars (1h and 15m) for AAPL.
+        2. Partition data into training windows and run ATR trailing stop and MA-RSI strategies.
+        3. Construct a 2x2 subplot canvas using Matplotlib and mplfinance candle renderers.
+        4. Verify headless figure generation and close figure safely to avoid memory leaks.
+        5. Assert strategy indicator outputs are non-empty across the evaluated intervals.
+    """
     ticker = 'AAPL'
     data_1h = download_data(ticker, period="1mo", interval="1h")
     data_15m = download_data(ticker, period="1mo", interval="15m")

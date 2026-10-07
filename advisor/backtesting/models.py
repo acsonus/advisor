@@ -18,7 +18,27 @@ class BacktestConfig:
     max_hold_bars: int | None = None
 
     def validate(self) -> None:
-        """Validate parameter ranges."""
+        """
+        Validate backtesting constraints and friction parameters.
+
+        Goal:
+        -----
+        Prevent invalid execution parameters (such as negative costs or zero initial cash)
+        from causing mathematical domain errors or unphysical simulation results.
+
+        Execution Principle:
+        --------------------
+        1. Verifies that transaction fees (`fee_bps`) and slippage (`slippage_bps`) are non-negative.
+        2. If `initial_cash` is specified, ensures capital > 0.
+        3. If risk boundaries (`stop_loss_pct`, `take_profit_pct`) are specified, ensures percentages > 0.
+        4. If `max_hold_bars` is specified, verifies it is a positive integer (> 0).
+        5. Raises `ValueError` with informative message if any constraint is violated.
+
+        Raises:
+        -------
+        ValueError
+            If any parameter value is out of bounds.
+        """
         if self.fee_bps < 0 or self.slippage_bps < 0:
             raise ValueError("fee_bps and slippage_bps must be non-negative")
         if self.initial_cash is not None and self.initial_cash <= 0:
@@ -60,7 +80,25 @@ class BacktestResult:
     skipped_buys_due_to_cash: int = 0
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert metrics to standard dictionary."""
+        """
+        Convert performance metrics to a standard Python dictionary.
+
+        Goal:
+        -----
+        Maintain backward-compatible format parity with existing reporting engines,
+        JSON API endpoints, and assertions in test suites.
+
+        Execution Principle:
+        --------------------
+        Extracts all metric attributes into key-value pairs matching the classical
+        `backtest_strategy()` dictionary schema.
+
+        Returns:
+        --------
+        dict[str, Any]
+            Dictionary containing metrics including total return, Sharpe ratio, drawdown,
+            win rate, trade counts, and trade return arrays.
+        """
         return {
             'total_return_pct': self.total_return_pct,
             'annualized_return_pct': self.annualized_return_pct,

@@ -16,7 +16,32 @@ MID_GREY = colors.HexColor('#595959')
 
 
 def build_report_styles() -> dict[str, ParagraphStyle]:
-    """Build typography and paragraph styles for the report."""
+    """
+    Construct a centralized dictionary of ReportLab paragraph styles for PDF generation.
+
+    Goal:
+    -----
+    Standardize visual presentation across PDF report sections (title, subtitles,
+    section headers, body text, disclaimers, and colored signal tags) using
+    consistent typography, leading, and padding.
+
+    Execution Principle:
+    --------------------
+    1. Loads the base ReportLab stylesheet (`getSampleStyleSheet()`).
+    2. Builds custom `ParagraphStyle` definitions:
+       - `'title'`: Large bold Helvetica centered in white for dark banner headers.
+       - `'subtitle'`: Light-grey metadata sub-headers for tickers and timestamps.
+       - `'section'`: High-contrast header for table and analysis categories.
+       - `'body'`: Compact body text suitable for table cells.
+       - `'disclaimer'`: Small oblique text for regulatory and risk disclosures.
+       - `'signal_buy'`, `'signal_sell'`, `'signal_hold'`: Bold, color-accented signal text.
+    3. Returns a dictionary mapping style names to their `ParagraphStyle` instances.
+
+    Returns:
+    --------
+    dict[str, ParagraphStyle]
+        Style dictionary indexed by style name.
+    """
     base = getSampleStyleSheet()
     styles: dict[str, ParagraphStyle] = {}
 
@@ -68,7 +93,31 @@ def build_report_styles() -> dict[str, ParagraphStyle]:
 
 
 def get_signal_colour(signal: str) -> colors.Color:
-    """Return matching ReportLab color for Buy/Sell/Hold signal."""
+    """
+    Map directional signal text to its semantic ReportLab color.
+
+    Goal:
+    -----
+    Provide immediate visual distinction for trade directions within PDF tables.
+
+    Execution Principle:
+    --------------------
+    1. Normalizes the input string by stripping whitespace and lowercasing.
+    2. Maps:
+       - 'buy'  -> GREEN (`#00B050`)
+       - 'sell' -> RED (`#FF0000`)
+       - any other (e.g. 'hold') -> MID_GREY (`#595959`)
+
+    Parameters:
+    -----------
+    signal : str
+        Signal text ('Buy', 'Sell', 'Hold').
+
+    Returns:
+    --------
+    colors.Color
+        ReportLab color representation.
+    """
     s = str(signal).strip().lower()
     if s == 'buy':
         return GREEN
@@ -78,7 +127,34 @@ def get_signal_colour(signal: str) -> colors.Color:
 
 
 def render_sentiment_bar(score: float, width: int = 20) -> str:
-    """ASCII progress bar for sentiment score (-1 … 1)."""
+    """
+    Render a text-based ASCII progress bar representing a sentiment score.
+
+    Goal:
+    -----
+    Provide a compact, scannable visual indicator of sentiment magnitude and polarity
+    inside table cells without requiring embedded graphic assets.
+
+    Execution Principle:
+    --------------------
+    1. Maps `score` from interval `[-1.0, 1.0]` to fraction `[0.0, 1.0]` via `(score + 1) / 2`.
+    2. Multiplies by total `width` characters to determine filled count.
+    3. Clamps filled count within `[0, width]`.
+    4. Concatenates filled block glyphs (`'█'`) and unfilled light shade glyphs (`'░'`).
+    5. Appends the exact formatted signed numeric score: `[████░░░░]  +0.250`.
+
+    Parameters:
+    -----------
+    score : float
+        Sentiment score between -1.0 and 1.0.
+    width : int, default 20
+        Total character width of the progress bar track.
+
+    Returns:
+    --------
+    str
+        Formatted string containing the bar graphic and signed score.
+    """
     filled = int((score + 1) / 2 * width)
     filled = max(0, min(width, filled))
     return '[' + '█' * filled + '░' * (width - filled) + f']  {score:+.3f}'

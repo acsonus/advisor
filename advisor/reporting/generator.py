@@ -29,9 +29,34 @@ from advisor.reporting.styles import (
 
 
 class PdfReportGenerator:
-    """Builder for professional trading analysis PDF reports."""
+    """
+    Builder for professional trading analysis PDF reports.
+
+    Assembles market data summaries, recent strategy signals, and news sentiment
+    analysis into a multi-page, publication-quality A4 PDF document.
+    """
 
     def __init__(self, ticker: str, budget_eur: float = 0.0):
+        """
+        Initialize the report generator with asset and portfolio context.
+
+        Goal:
+        -----
+        Configure metadata, typography styles, and layout geometry for the report document.
+
+        Execution Principle:
+        --------------------
+        1. Stores `ticker` and `budget_eur`.
+        2. Initializes typography styles via `build_report_styles()`.
+        3. Computes usable page width for an A4 sheet (`A4[0] - 2 * 1.8cm`).
+
+        Parameters:
+        -----------
+        ticker : str
+            Stock ticker symbol (e.g. 'AAPL').
+        budget_eur : float, default 0.0
+            Allocated trader investment capital in EUR.
+        """
         self.ticker = ticker
         self.budget_eur = budget_eur
         self.styles = build_report_styles()
@@ -43,7 +68,54 @@ class PdfReportGenerator:
         news_df: pd.DataFrame | None,
         output_path: str | None = None,
     ) -> str:
-        """Build and save PDF report."""
+        """
+        Build, compile, and save the complete trading analysis PDF report.
+
+        Goal:
+        -----
+        Synthesize OHLCV price action, technical strategy signals, and sentiment analysis
+        into a cohesive visual PDF document containing styled tables and color-coded status tags.
+
+        Execution Principle:
+        --------------------
+        1. Output Path Determination:
+           If `output_path` is not provided, defaults to `trading_report_<TICKER>_<YYYYMMDD_HHMM>.pdf`
+           in the current working directory.
+        2. Document Canvas Setup:
+           Creates a `SimpleDocTemplate` configured for A4 dimensions with 1.8cm side margins
+           and 2.0cm vertical margins.
+        3. Header Banner:
+           Appends a dark-themed banner with rounded corners containing the document title,
+           followed by subtitle metadata (Ticker, Date, Budget) and a divider rule.
+        4. Section 1 — Market Data Summary:
+           Builds a summary table extracting latest close, 1-day price change, period high/low,
+           and observation count.
+        5. Section 2 — Strategy Signals Table:
+           Extracts the last 10 trading bars across all computed signal columns (`atr_signal`,
+           `ma_rsi_signal`, `sentiment_signal`, `daily_sentiment`), applying colored background
+           badges (Green for Buy, Red for Sell) to signal cells.
+        6. Section 3 — News Sentiment Analysis:
+           - Formats top 10 articles into a table with title, date, label, score, and progress bar.
+           - Adds an overall market sentiment verdict block (BULLISH / BEARISH / NEUTRAL).
+        7. Section 4 — Disclaimer:
+           Appends required financial and investment risk disclosures.
+        8. Document Compilation:
+           Executes `doc.build(story)` to render flowables to PDF disk storage, returning the absolute path.
+
+        Parameters:
+        -----------
+        ohlcv_df : pd.DataFrame
+            OHLCV DataFrame containing strategy indicator and signal columns.
+        news_df : pd.DataFrame | None
+            Analyzed news sentiment DataFrame.
+        output_path : str, optional
+            Target file path for the generated PDF.
+
+        Returns:
+        --------
+        str
+            Absolute file path to the saved PDF.
+        """
         if output_path is None:
             date_str = datetime.now().strftime('%Y%m%d_%H%M')
             output_path = os.path.join(
@@ -203,7 +275,7 @@ class PdfReportGenerator:
                     label = row_data[2]
                     tc = GREEN if label == 'Positive' else (RED if label == 'Negative' else MID_GREY)
                     news_styles.append(('TEXTCOLOR', (2, ri), (2, ri), tc))
-                    news_styles.append(('FONTNAME', (2, ri), (2, ri), 'Helvetica-Bold'))
+                    news_styles.append(('FONTNAME',  (2, ri), (2, ri), 'Helvetica-Bold'))
 
                 nt.setStyle(TableStyle(news_styles))
                 story.append(nt)
@@ -254,6 +326,35 @@ def generate_report(
     budget_eur: float = 0.0,
     output_path: str | None = None,
 ) -> str:
-    """Backward-compatible function wrapper for PDF report generation."""
+    """
+    Functional wrapper for PDF report generation.
+
+    Goal:
+    -----
+    Maintain full backward compatibility with external scripts, CLI runners, and Flask endpoints.
+
+    Execution Principle:
+    --------------------
+    Instantiates `PdfReportGenerator` with `ticker` and `budget_eur`, delegating the
+    actual compilation process to `generate()`.
+
+    Parameters:
+    -----------
+    ticker : str
+        Stock ticker symbol.
+    ohlcv_df : pd.DataFrame
+        OHLCV price bars and strategy signals.
+    news_df : pd.DataFrame | None
+        News sentiment DataFrame.
+    budget_eur : float, default 0.0
+        Portfolio budget.
+    output_path : str, optional
+        Target PDF file path.
+
+    Returns:
+    --------
+    str
+        Absolute path to the generated PDF document.
+    """
     generator = PdfReportGenerator(ticker=ticker, budget_eur=budget_eur)
     return generator.generate(ohlcv_df=ohlcv_df, news_df=news_df, output_path=output_path)

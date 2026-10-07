@@ -6,6 +6,7 @@ import pandas as pd
 
 
 class SignalType:
+    """Canonical strategy signal constants."""
     BUY = "Buy"
     SELL = "Sell"
     HOLD = "Hold"
@@ -13,10 +14,10 @@ class SignalType:
 
 class BaseStrategy(ABC):
     """
-    Abstract base class for trading strategies.
+    Abstract base class establishing the contract for all trading strategies.
 
-    Subclasses implement `generate_signals` which accepts an OHLCV DataFrame
-    and returns a DataFrame containing indicators and a 'Signal' column.
+    Follows the Strategy design pattern, decoupling indicator calculation
+    and signal generation logic from the backtesting and API consumers.
     """
 
     name: ClassVar[str] = "base_strategy"
@@ -25,20 +26,56 @@ class BaseStrategy(ABC):
     @abstractmethod
     def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
         """
-        Execute strategy logic on OHLCV data.
+        Execute strategy logic and generate directional trading signals on OHLCV data.
 
-        Parameters
-        ----------
+        Goal:
+        -----
+        Process raw time-series market price bars, compute strategy-specific technical indicators,
+        and emit unambiguous directional signals ('Buy', 'Sell', 'Hold') per bar without mutating
+        the caller's input DataFrame.
+
+        Execution Principle:
+        --------------------
+        1. Subclasses must override this method.
+        2. Create a clean internal copy of `data` to guarantee no input mutation.
+        3. Compute indicators (e.g., EMAs, ATR, Bollinger Bands, MACD, VWAP).
+        4. Apply entry/exit decision logic on historical bars up to the current bar,
+           ensuring no look-ahead bias (using shifted signals where required).
+        5. Populate a `'Signal'` column with `'Buy'`, `'Sell'`, or `'Hold'`.
+        6. Return a DataFrame containing relevant indicator columns and `'Signal'`.
+
+        Parameters:
+        -----------
         data : pd.DataFrame
-            OHLCV data indexed by timestamp/date.
+            OHLCV DataFrame indexed by timestamp with columns `['Open', 'High', 'Low', 'Close', 'Volume']`.
 
-        Returns
-        -------
+        Returns:
+        --------
         pd.DataFrame
-            DataFrame with indicator columns and 'Signal' column ('Buy', 'Sell', 'Hold').
+            DataFrame with indicator columns and `'Signal'` column ('Buy', 'Sell', 'Hold').
         """
         pass
 
     def __call__(self, data: pd.DataFrame) -> pd.DataFrame:
-        """Allow calling instance directly as a callable."""
+        """
+        Provide callable syntax interface for strategy instances.
+
+        Goal:
+        -----
+        Enable strategy instances to be invoked cleanly like functions: `strategy(df)`.
+
+        Execution Principle:
+        --------------------
+        Forwards the input `data` argument directly to `self.generate_signals(data)`.
+
+        Parameters:
+        -----------
+        data : pd.DataFrame
+            OHLCV market price bars.
+
+        Returns:
+        --------
+        pd.DataFrame
+            Result of `generate_signals(data)`.
+        """
         return self.generate_signals(data)

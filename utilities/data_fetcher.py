@@ -6,6 +6,22 @@ HOST = '127.0.0.1'
 PORT = 9090
 
 def start_server():
+    """
+    Goal:
+        Initialize and run a local TCP socket bridge server to ingest historical bar
+        data from a MetaTrader 5 (MT5) Expert Advisor (EA) running under Wine or Windows.
+
+    Execution Principle:
+        1. Socket Initialization: Binds an IPv4 TCP socket (`AF_INET`, `SOCK_STREAM`) to `127.0.0.1:9090`
+           with `SO_REUSEADDR` enabled to avoid `EADDRINUSE` during quick restarts.
+        2. Connection Handshake: Listens and blocks until an inbound connection is accepted from the MT5 EA.
+        3. Protocol Query: Pauses briefly (2 seconds) to allow the EA client socket buffer to stabilize,
+           then dispatches a formatted historical bar request (`HISTORY|SYMBOL|TIMEFRAME|COUNT\\n`).
+        4. Stream Buffering: Enters a continuous receive loop reading up to 4096-byte segments into an
+           accumulator string until a newline delimiter (`\\n`) demarcates message completion.
+        5. Serialization & Logging: Deserializes the completed JSON payload into Python objects,
+           prints pretty-printed bar data, and gracefully recovers from JSON parse or reset errors.
+    """
     # Create a TCP socket
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
         # Allow port reuse so you don't get "Address already in use" errors if you restart quickly

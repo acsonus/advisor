@@ -8,14 +8,64 @@ from advisor.backtesting.models import BacktestConfig, BacktestResult
 
 
 class BacktestEngine:
-    """Simulates trading strategy execution on historical OHLCV data."""
+    """
+    Simulates trading strategy execution on historical OHLCV data.
+
+    Executes trades bar-by-bar using either realistic cash-constrained portfolio sizing
+    or legacy unit-share return tracking, taking into account fees, slippage, and
+    risk management constraints (stop-loss, take-profit, max holding duration).
+    """
 
     def __init__(self, config: BacktestConfig | None = None):
+        """
+        Initialize the BacktestEngine with execution and risk parameters.
+
+        Goal:
+        -----
+        Store simulation configuration and validate all constraint parameters before execution.
+
+        Execution Principle:
+        --------------------
+        1. Assigns `config` or instantiates default `BacktestConfig()`.
+        2. Calls `self.config.validate()` to guarantee non-negative costs and positive thresholds.
+
+        Parameters:
+        -----------
+        config : BacktestConfig, optional
+            Backtesting configuration settings.
+        """
         self.config = config or BacktestConfig()
         self.config.validate()
 
     def run(self, df: pd.DataFrame) -> BacktestResult:
-        """Run backtest simulation on data containing signals and close prices."""
+        """
+        Execute backtest simulation across the supplied signal and price dataset.
+
+        Goal:
+        -----
+        Route data into the appropriate execution engine mode (cash-constrained share-sizing
+        versus legacy 1-unit mode) and produce complete performance metrics.
+
+        Execution Principle:
+        --------------------
+        1. Extract numpy arrays for close prices (`close_col`) and signals (`signal_col`).
+        2. Calculate one-way combined friction rate: `one_way_cost_rate = (fee_bps + slippage_bps) / 10000.0`.
+        3. If sample length < 2 bars, short-circuit and return a null `BacktestResult` with zero metrics.
+        4. If `initial_cash` is provided:
+           Delegates to `_run_cash_constrained()` where purchases are sized by available liquidity.
+        5. If `initial_cash` is None:
+           Delegates to `_run_legacy_unit()` simulating 1-unit positions for backward compatibility.
+
+        Parameters:
+        -----------
+        df : pd.DataFrame
+            DataFrame containing prices (`close_col`) and trading signals (`signal_col`).
+
+        Returns:
+        --------
+        BacktestResult
+            Computed simulation performance results and metrics.
+        """
         cfg = self.config
         prices = df[cfg.close_col].to_numpy(dtype=float)
         signals = df[cfg.signal_col].to_numpy()
@@ -52,6 +102,54 @@ class BacktestEngine:
         one_way_cost_rate: float,
         initial_cash: float,
     ) -> BacktestResult:
+        """
+        Simulate realistic cash-constrained execution where position size depends on capital.
+
+        Goal:
+        -----
+        Model cash balance depletion, dynamic share allocation, cash-drag on portfolio equity,
+        and transaction friction costs on each trade entry and exit.
+
+        Execution Principle:
+        --------------------
+        1. Initialize cash account with `initial_cash`, position `shares = 0.0`, and `in_position = False`.
+        2. Iterate bar-by-bar across all price bars:
+           a. If in a position, evaluate risk management exits:
+              - `gross_ret = (price / entry_price_raw) - 1.0`.
+              - Stop loss exit: if `gross_ret <= -stop_loss_pct`.
+              - Take profit exit: if `gross_ret >= take_profit_pct`.
+              - Max holding period exit: if `bars_held >= max_hold_bars`.
+              - On risk exit: liquidate shares, deduct exit transaction costs, compute net trade return,
+                credit cash account, and reset position tracking.
+           b. Signal processing:
+              - If signal is 'Buy' and flat: compute maximum integer shares affordable from current cash
+                including entry costs (`per_share_cost = price * (1 + cost_rate)`). If `max_shares >= 1`,
+                deduct cost from cash and enter long; otherwise increment `skipped_buys_due_to_cash`.
+              - If signal is 'Sell' and in position: liquidate shares net of exit fees, record trade return,
+                credit cash, and reset position.
+           c. Mark-to-market: record total portfolio equity at bar close (`equity[i] = cash + shares * price`).
+        3. Force-close any open position on final bar at `prices[-1]`.
+        4. Calculate bar-to-bar returns: `daily_rets = diff(equity) / equity[:-1]`.
+        5. Forward results to `calculate_metrics()` to compute CAGR, Sharpe, drawdown, and win rate.
+
+        Parameters:
+        -----------
+        prices : np.ndarray
+            Close price array.
+        signals : np.ndarray
+            Signal string array ('Buy', 'Sell', 'Hold').
+        n : int
+            Bar count.
+        one_way_cost_rate : float
+            Fractional cost per transaction leg (fees + slippage).
+        initial_cash : float
+            Starting balance in currency units.
+
+        Returns:
+        --------
+        BacktestResult
+            Calculated backtest metrics.
+        """
         cfg = self.config
         cash = float(initial_cash)
         shares = 0.0
@@ -153,6 +251,47 @@ class BacktestEngine:
         n: int,
         one_way_cost_rate: float,
     ) -> BacktestResult:
+        """
+        Simulate classical 1-unit position percentage return tracking without cash sizing.
+
+        Goal:
+        -----
+        Provide pure percentage strategy return tracking matching legacy backtest models,
+        independent of account capital size.
+
+        Execution Principle:
+        --------------------
+        1. Maintain binary exposure array `positions` (1.0 when long, 0.0 when flat) and `cost_rets`.
+        2. Iterate bar-by-bar:
+           - Check risk management exits (stop loss, take profit, max hold bars). If triggered,
+             record trade return net of execution friction and exit to flat.
+           - If 'Buy' and flat: set `in_position = True`, execute at `price * (1 + cost_rate)`,
+             record entry friction in `cost_rets`.
+           - If 'Sell' and in position: set `in_position = False`, execute at `price * (1 - cost_rate)`,
+             record trade return, record exit friction.
+           - If still in position, set `positions[i] = 1.0`.
+        3. Force close open position at `prices[-1]`.
+        4. Calculate bar percentage price changes `price_rets = diff(prices) / prices[:-1]`.
+        5. Composite bar returns: `daily_rets = positions * price_rets - cost_rets`.
+        6. Compound portfolio equity curve: `equity = cumprod(1.0 + daily_rets)`.
+        7. Compute and return metrics via `calculate_metrics()`.
+
+        Parameters:
+        -----------
+        prices : np.ndarray
+            Close prices.
+        signals : np.ndarray
+            Trading signals.
+        n : int
+            Bar count.
+        one_way_cost_rate : float
+            Friction per trade leg.
+
+        Returns:
+        --------
+        BacktestResult
+            Calculated backtest metrics.
+        """
         cfg = self.config
         in_position = False
         entry_price_raw = 0.0
@@ -232,7 +371,48 @@ def backtest_strategy(
     take_profit_pct: float | None = None,
     max_hold_bars: int | None = None,
 ) -> dict:
-    """Backward-compatible function wrapper for the backtest engine."""
+    """
+    Long-only backtest engine function for any strategy emitting Buy/Sell/Hold signals.
+
+    Goal:
+    -----
+    Provide a convenient, backward-compatible functional interface to execute backtests,
+    returning metrics in the classic Python dictionary format.
+
+    Execution Principle:
+    --------------------
+    1. Bundles parameters into a `BacktestConfig` instance.
+    2. Instantiates a `BacktestEngine` with that configuration.
+    3. Runs the simulation on the input DataFrame `df`.
+    4. Converts the resulting `BacktestResult` to a dictionary using `.to_dict()` and returns it.
+
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        DataFrame containing price and signal columns.
+    signal_col : str, default 'Signal'
+        Column name with 'Buy', 'Sell', 'Hold' labels.
+    close_col : str, default 'Close'
+        Column name with asset closing prices.
+    fee_bps : float, default 0.0
+        Transaction commission in basis points.
+    slippage_bps : float, default 0.0
+        Execution slippage friction in basis points.
+    initial_cash : float, optional
+        Starting capital. If provided, enables cash-constrained sizing.
+    stop_loss_pct : float, optional
+        Percentage loss threshold triggering risk exit.
+    take_profit_pct : float, optional
+        Percentage gain threshold triggering profit taking.
+    max_hold_bars : int, optional
+        Maximum bar count allowed per trade before forced exit.
+
+    Returns:
+    --------
+    dict
+        Dictionary containing all performance metrics (total_return_pct, sharpe_ratio,
+        max_drawdown_pct, win_rate_pct, profit_factor, n_trades, trade_returns, etc.).
+    """
     config = BacktestConfig(
         signal_col=signal_col,
         close_col=close_col,

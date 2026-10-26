@@ -87,12 +87,29 @@ class BacktestEngine:
                 skipped_buys_due_to_cash=0,
             )
 
+        atr_values = None
+        if cfg.atr_col and cfg.atr_col in df.columns:
+            atr_values = df[cfg.atr_col].to_numpy(dtype=float)
+        elif (cfg.stop_loss_atr_mult is not None or cfg.take_profit_atr_mult is not None) and all(
+            c in df.columns for c in ('High', 'Low', 'Close')
+        ):
+            high = df['High'].to_numpy(dtype=float)
+            low = df['Low'].to_numpy(dtype=float)
+            close = df['Close'].to_numpy(dtype=float)
+            tr1 = high - low
+            tr2 = np.abs(high[1:] - close[:-1])
+            tr3 = np.abs(low[1:] - close[:-1])
+            tr = np.zeros(n, dtype=float)
+            tr[0] = tr1[0]
+            tr[1:] = np.maximum(tr1[1:], np.maximum(tr2, tr3))
+            atr_values = pd.Series(tr).rolling(14, min_periods=1).mean().to_numpy(dtype=float)
+
         if cfg.initial_cash is not None:
             return self._run_cash_constrained(
-                prices, signals, n, one_way_cost_rate, float(cfg.initial_cash)
+                prices, signals, n, one_way_cost_rate, float(cfg.initial_cash), atr_values=atr_values
             )
         else:
-            return self._run_legacy_unit(prices, signals, n, one_way_cost_rate)
+            return self._run_legacy_unit(prices, signals, n, one_way_cost_rate, atr_values=atr_values)
 
     def _run_cash_constrained(
         self,
@@ -101,6 +118,7 @@ class BacktestEngine:
         n: int,
         one_way_cost_rate: float,
         initial_cash: float,
+        atr_values: np.ndarray | None = None,
     ) -> BacktestResult:
         """
         Simulate realistic cash-constrained execution where position size depends on capital.
@@ -156,6 +174,9 @@ class BacktestEngine:
         in_position = False
         entry_total_cost = 0.0
         entry_price_raw = 0.0
+        peak_price = 0.0
+        stop_price = None
+        target_price = None
         entry_index = -1
         equity = np.zeros(n, dtype=float)
         trade_returns: list[float] = []
@@ -167,13 +188,28 @@ class BacktestEngine:
             if in_position:
                 bars_held = i - entry_index
                 gross_ret = (price / entry_price_raw) - 1.0
+                peak_price = max(peak_price, price)
                 risk_exit = False
 
-                if cfg.stop_loss_pct is not None and gross_ret <= -cfg.stop_loss_pct:
+                if cfg.trailing_stop:
+                    trail_pct = (
+                        cfg.trailing_stop_pct
+                        if cfg.trailing_stop_pct is not None
+                        else cfg.stop_loss_pct
+                    )
+                    if trail_pct is not None and ((price / peak_price) - 1.0) <= -trail_pct:
+                        risk_exit = True
+                elif cfg.stop_loss_pct is not None and gross_ret <= -cfg.stop_loss_pct:
                     risk_exit = True
-                elif cfg.take_profit_pct is not None and gross_ret >= cfg.take_profit_pct:
+                elif stop_price is not None and price <= stop_price:
                     risk_exit = True
-                elif cfg.max_hold_bars is not None and bars_held >= cfg.max_hold_bars:
+
+                if cfg.take_profit_pct is not None and gross_ret >= cfg.take_profit_pct:
+                    risk_exit = True
+                elif target_price is not None and price >= target_price:
+                    risk_exit = True
+
+                if cfg.max_hold_bars is not None and bars_held >= cfg.max_hold_bars:
                     risk_exit = True
 
                 if risk_exit:
@@ -189,6 +225,9 @@ class BacktestEngine:
                     in_position = False
                     entry_total_cost = 0.0
                     entry_price_raw = 0.0
+                    peak_price = 0.0
+                    stop_price = None
+                    target_price = None
                     entry_index = -1
 
             if signals[i] == 'Buy' and not in_position and price > 0:
@@ -200,7 +239,16 @@ class BacktestEngine:
                     cash -= entry_total_cost
                     in_position = True
                     entry_price_raw = price
+                    peak_price = price
                     entry_index = i
+                    stop_price = None
+                    target_price = None
+                    if atr_values is not None:
+                        curr_atr = atr_values[i]
+                        if cfg.stop_loss_atr_mult is not None:
+                            stop_price = price - (cfg.stop_loss_atr_mult * curr_atr)
+                        if cfg.take_profit_atr_mult is not None:
+                            target_price = price + (cfg.take_profit_atr_mult * curr_atr)
                 else:
                     skipped_buys_due_to_cash += 1
             elif signals[i] == 'Sell' and in_position and price > 0:
@@ -216,6 +264,9 @@ class BacktestEngine:
                 in_position = False
                 entry_total_cost = 0.0
                 entry_price_raw = 0.0
+                peak_price = 0.0
+                stop_price = None
+                target_price = None
                 entry_index = -1
 
             equity[i] = cash + shares * price
@@ -250,6 +301,7 @@ class BacktestEngine:
         signals: np.ndarray,
         n: int,
         one_way_cost_rate: float,
+        atr_values: np.ndarray | None = None,
     ) -> BacktestResult:
         """
         Simulate classical 1-unit position percentage return tracking without cash sizing.
@@ -263,8 +315,8 @@ class BacktestEngine:
         --------------------
         1. Maintain binary exposure array `positions` (1.0 when long, 0.0 when flat) and `cost_rets`.
         2. Iterate bar-by-bar:
-           - Check risk management exits (stop loss, take profit, max hold bars). If triggered,
-             record trade return net of execution friction and exit to flat.
+           - Check risk management exits (stop loss, take profit, max hold bars, trailing stops, ATR stops).
+             If triggered, record trade return net of execution friction and exit to flat.
            - If 'Buy' and flat: set `in_position = True`, execute at `price * (1 + cost_rate)`,
              record entry friction in `cost_rets`.
            - If 'Sell' and in position: set `in_position = False`, execute at `price * (1 - cost_rate)`,
@@ -286,6 +338,8 @@ class BacktestEngine:
             Bar count.
         one_way_cost_rate : float
             Friction per trade leg.
+        atr_values : np.ndarray, optional
+            Precalculated ATR series.
 
         Returns:
         --------
@@ -296,6 +350,9 @@ class BacktestEngine:
         in_position = False
         entry_price_raw = 0.0
         entry_price_exec = 0.0
+        peak_price = 0.0
+        stop_price = None
+        target_price = None
         entry_index = -1
         positions = np.zeros(n)
         cost_rets = np.zeros(n)
@@ -305,19 +362,40 @@ class BacktestEngine:
             if in_position:
                 bars_held = i - entry_index
                 gross_ret = (prices[i] / entry_price_raw) - 1.0
+                peak_price = max(peak_price, prices[i])
                 risk_exit = False
 
-                if cfg.stop_loss_pct is not None and gross_ret <= -cfg.stop_loss_pct:
+                if cfg.trailing_stop:
+                    trail_pct = (
+                        cfg.trailing_stop_pct
+                        if cfg.trailing_stop_pct is not None
+                        else cfg.stop_loss_pct
+                    )
+                    if trail_pct is not None and ((prices[i] / peak_price) - 1.0) <= -trail_pct:
+                        risk_exit = True
+                elif cfg.stop_loss_pct is not None and gross_ret <= -cfg.stop_loss_pct:
                     risk_exit = True
-                elif cfg.take_profit_pct is not None and gross_ret >= cfg.take_profit_pct:
+                elif stop_price is not None and prices[i] <= stop_price:
                     risk_exit = True
-                elif cfg.max_hold_bars is not None and bars_held >= cfg.max_hold_bars:
+
+                if cfg.take_profit_pct is not None and gross_ret >= cfg.take_profit_pct:
+                    risk_exit = True
+                elif target_price is not None and prices[i] >= target_price:
+                    risk_exit = True
+
+                if cfg.max_hold_bars is not None and bars_held >= cfg.max_hold_bars:
                     risk_exit = True
 
                 if risk_exit:
                     exit_price_exec = prices[i] * (1.0 - one_way_cost_rate)
                     trade_returns.append((exit_price_exec - entry_price_exec) / entry_price_exec)
                     in_position = False
+                    entry_price_raw = 0.0
+                    entry_price_exec = 0.0
+                    peak_price = 0.0
+                    stop_price = None
+                    target_price = None
+                    entry_index = -1
                     positions[i] = 1.0
                     cost_rets[i] += one_way_cost_rate
                     continue
@@ -326,13 +404,28 @@ class BacktestEngine:
                 in_position = True
                 entry_price_raw = prices[i]
                 entry_price_exec = prices[i] * (1.0 + one_way_cost_rate)
+                peak_price = prices[i]
                 entry_index = i
+                stop_price = None
+                target_price = None
+                if atr_values is not None:
+                    curr_atr = atr_values[i]
+                    if cfg.stop_loss_atr_mult is not None:
+                        stop_price = prices[i] - (cfg.stop_loss_atr_mult * curr_atr)
+                    if cfg.take_profit_atr_mult is not None:
+                        target_price = prices[i] + (cfg.take_profit_atr_mult * curr_atr)
                 positions[i] = 0.0
                 cost_rets[i] += one_way_cost_rate
             elif signals[i] == 'Sell' and in_position:
                 in_position = False
                 exit_price_exec = prices[i] * (1.0 - one_way_cost_rate)
                 trade_returns.append((exit_price_exec - entry_price_exec) / entry_price_exec)
+                entry_price_raw = 0.0
+                entry_price_exec = 0.0
+                peak_price = 0.0
+                stop_price = None
+                target_price = None
+                entry_index = -1
                 positions[i] = 1.0
                 cost_rets[i] += one_way_cost_rate
             elif in_position:
@@ -370,6 +463,11 @@ def backtest_strategy(
     stop_loss_pct: float | None = None,
     take_profit_pct: float | None = None,
     max_hold_bars: int | None = None,
+    trailing_stop: bool = False,
+    trailing_stop_pct: float | None = None,
+    stop_loss_atr_mult: float | None = None,
+    take_profit_atr_mult: float | None = None,
+    atr_col: str | None = None,
 ) -> dict:
     """
     Long-only backtest engine function for any strategy emitting Buy/Sell/Hold signals.
@@ -406,6 +504,16 @@ def backtest_strategy(
         Percentage gain threshold triggering profit taking.
     max_hold_bars : int, optional
         Maximum bar count allowed per trade before forced exit.
+    trailing_stop : bool, default False
+        Whether to trail the stop loss behind the peak price.
+    trailing_stop_pct : float, optional
+        Trailing drop percentage from peak.
+    stop_loss_atr_mult : float, optional
+        Dynamic stop loss in ATR multiples below entry.
+    take_profit_atr_mult : float, optional
+        Dynamic profit target in ATR multiples above entry.
+    atr_col : str, optional
+        Column name for precomputed ATR in df.
 
     Returns:
     --------
@@ -422,6 +530,11 @@ def backtest_strategy(
         stop_loss_pct=stop_loss_pct,
         take_profit_pct=take_profit_pct,
         max_hold_bars=max_hold_bars,
+        trailing_stop=trailing_stop,
+        trailing_stop_pct=trailing_stop_pct,
+        stop_loss_atr_mult=stop_loss_atr_mult,
+        take_profit_atr_mult=take_profit_atr_mult,
+        atr_col=atr_col,
     )
     result = BacktestEngine(config).run(df)
     return result.to_dict()

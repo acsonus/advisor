@@ -16,6 +16,11 @@ class BacktestConfig:
     stop_loss_pct: float | None = None
     take_profit_pct: float | None = None
     max_hold_bars: int | None = None
+    trailing_stop: bool = False
+    trailing_stop_pct: float | None = None
+    stop_loss_atr_mult: float | None = None
+    take_profit_atr_mult: float | None = None
+    atr_col: str | None = None
 
     def validate(self) -> None:
         """
@@ -32,7 +37,8 @@ class BacktestConfig:
         2. If `initial_cash` is specified, ensures capital > 0.
         3. If risk boundaries (`stop_loss_pct`, `take_profit_pct`) are specified, ensures percentages > 0.
         4. If `max_hold_bars` is specified, verifies it is a positive integer (> 0).
-        5. Raises `ValueError` with informative message if any constraint is violated.
+        5. If trailing stop or ATR multiplier limits are specified, ensures they are positive.
+        6. Raises `ValueError` with informative message if any constraint is violated.
 
         Raises:
         -------
@@ -49,6 +55,12 @@ class BacktestConfig:
             raise ValueError("take_profit_pct must be positive when provided")
         if self.max_hold_bars is not None and self.max_hold_bars <= 0:
             raise ValueError("max_hold_bars must be a positive integer when provided")
+        if self.trailing_stop_pct is not None and self.trailing_stop_pct <= 0:
+            raise ValueError("trailing_stop_pct must be positive when provided")
+        if self.stop_loss_atr_mult is not None and self.stop_loss_atr_mult <= 0:
+            raise ValueError("stop_loss_atr_mult must be positive when provided")
+        if self.take_profit_atr_mult is not None and self.take_profit_atr_mult <= 0:
+            raise ValueError("take_profit_atr_mult must be positive when provided")
 
 
 @dataclass

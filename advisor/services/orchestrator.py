@@ -4,14 +4,18 @@ import pandas as pd
 
 from advisor.backtesting import backtest_strategy
 from advisor.data import download_data, to_naive_s
+from advisor.optimization import StrategyOptimizer
 from advisor.reporting import generate_report
 from advisor.sentiment import YahooSentiments, news_sentiment_signal
 from advisor.strategies import (
+    StrategyRegistry,
     atr_trailing_stop,
     bollinger_squeeze_strategy,
     calculate_vwap,
+    get_effective_params,
     macd_histogram_reversal_strategy,
     ma_rsi_strategy,
+    save_optimal_params,
 )
 
 DEFAULT_SAMPLE_TICKERS = ["AAPL", "MSFT", "AMZN", "GOOGL", "TSLA"]
@@ -152,6 +156,7 @@ def run_simulation_for_ticker(
     interval: str,
     initial_cash: float,
     commission_bps: float,
+    use_optimal_params: bool = False,
 ) -> dict:
     """
     Run backtest simulations across all core strategies for a single ticker.
@@ -166,13 +171,10 @@ def run_simulation_for_ticker(
     --------------------
     1. Downloads OHLCV data for `ticker` and drops missing bars.
     2. Runs each strategy against the price history:
-       - `atr_trailing_stop`
-       - `ma_rsi_strategy`
-       - `bollinger_squeeze_strategy`
-       - `macd_histogram_reversal_strategy`
-       - `calculate_vwap`
-    3. Runs the `backtest_strategy` engine on each signal series using `initial_cash`
-       and `commission_bps` trading costs.
+       - Uses tuned parameters from `param_store` when `use_optimal_params=True`.
+       - Otherwise runs baseline default parameters.
+    3. Runs the `backtest_strategy` engine on each signal series using `initial_cash`,
+       `commission_bps`, and any active risk management parameters (stop-loss, trailing stop).
     4. Computes total profit in currency: `round(initial_cash * (total_return_pct / 100.0), 2)`.
     5. Packages returns, profit, trade count, win rate, drawdown, Sharpe ratio,
        and skipped buys into a structured result dictionary.
@@ -189,6 +191,8 @@ def run_simulation_for_ticker(
         Account starting capital.
     commission_bps : float
         One-way trade fee in basis points.
+    use_optimal_params : bool, default False
+        Whether to load and apply stored optimal hyperparameters and risk limits.
 
     Returns:
     --------
@@ -203,20 +207,31 @@ def run_simulation_for_ticker(
             f"No data returned for '{ticker}' with period='{period}' and interval='{interval}'."
         )
 
-    strategy_signals = {
-        'atr_trailing_stop': atr_trailing_stop(data)['Signal'],
-        'ma_rsi': ma_rsi_strategy(data)['Signal'],
-        'bollinger_squeeze': bollinger_squeeze_strategy(data)['Signal'],
-        'macd_histogram_reversal': macd_histogram_reversal_strategy(data)['Signal'],
-        'vwap_cross': calculate_vwap(data)['Signal'],
-    }
+    strategy_names = [
+        'atr_trailing_stop',
+        'ma_rsi',
+        'bollinger_squeeze',
+        'macd_histogram_reversal',
+        'vwap_cross',
+    ]
 
     strategy_results = {}
-    for strategy_name, signal_series in strategy_signals.items():
+    for strategy_name in strategy_names:
+        strat_params, risk_params = ({}, {})
+        if use_optimal_params:
+            strat_params, risk_params = get_effective_params(ticker, strategy_name)
+
+        strategy = StrategyRegistry.get(strategy_name, **strat_params)
+        signals_df = strategy.generate_signals(data)
+
         df_bt = pd.DataFrame({
             'Close': data['Close'],
-            'Signal': signal_series,
+            'Signal': signals_df['Signal'],
         }).dropna()
+        if 'High' in data.columns:
+            df_bt['High'] = data['High']
+        if 'Low' in data.columns:
+            df_bt['Low'] = data['Low']
 
         metrics = backtest_strategy(
             df_bt,
@@ -225,6 +240,12 @@ def run_simulation_for_ticker(
             fee_bps=commission_bps,
             slippage_bps=0.0,
             initial_cash=initial_cash,
+            stop_loss_pct=risk_params.get('stop_loss_pct'),
+            take_profit_pct=risk_params.get('take_profit_pct'),
+            max_hold_bars=risk_params.get('max_hold_bars'),
+            trailing_stop=bool(risk_params.get('trailing_stop', False)),
+            stop_loss_atr_mult=risk_params.get('stop_loss_atr_mult'),
+            take_profit_atr_mult=risk_params.get('take_profit_atr_mult'),
         )
 
         profit_amount = round(initial_cash * (metrics['total_return_pct'] / 100.0), 2)
@@ -236,6 +257,7 @@ def run_simulation_for_ticker(
             'max_drawdown_pct': metrics['max_drawdown_pct'],
             'sharpe_ratio': metrics['sharpe_ratio'],
             'skipped_buys_due_to_cash': metrics.get('skipped_buys_due_to_cash', 0),
+            'used_optimal_params': bool(strat_params or risk_params),
         }
 
     return {
@@ -243,3 +265,86 @@ def run_simulation_for_ticker(
         'bars': int(len(data)),
         'strategies': strategy_results,
     }
+
+
+def optimize_strategy_for_ticker(
+    ticker: str,
+    strategy_name: str,
+    period: str = '1y',
+    interval: str = '1d',
+    n_iter: int = 50,
+    initial_cash: float = 10000.0,
+    commission_bps: float = 0.0,
+    save_params: bool = True,
+    seed: int | None = 42,
+) -> dict:
+    """
+    Execute systematic parameter search and risk limit optimization for a strategy and ticker.
+
+    Goal:
+    -----
+    Find indicator configurations and risk controls (stop loss, profit target, trailing stop)
+    that optimize risk-adjusted returns and verify that out-of-sample performance holds up.
+
+    Parameters:
+    -----------
+    ticker : str
+        Stock symbol to optimize (e.g. 'AAPL').
+    strategy_name : str
+        Strategy name registered in StrategyRegistry (e.g. 'ma_rsi').
+    period : str, default '1y'
+        Historical duration to download.
+    interval : str, default '1d'
+        Bar resolution.
+    n_iter : int, default 50
+        Number of randomized parameter configurations to test.
+    initial_cash : float, default 10000.0
+        Account starting capital.
+    commission_bps : float, default 0.0
+        Trading fee in basis points.
+    save_params : bool, default True
+        Whether to persist winning parameters to optimal_params.json.
+    seed : int, optional, default 42
+        Random seed for reproducible parameter sampling.
+
+    Returns:
+    --------
+    dict
+        Structured optimization report including best parameters, in-sample vs
+        out-of-sample metrics, baseline comparison, and top trials.
+    """
+    data = download_data(ticker, period=period, interval=interval)
+    data.dropna(inplace=True)
+
+    if data.empty:
+        raise ValueError(
+            f"No data returned for '{ticker}' with period='{period}' and interval='{interval}'."
+        )
+
+    optimizer = StrategyOptimizer(
+        initial_cash=initial_cash,
+        commission_bps=commission_bps,
+    )
+
+    result = optimizer.optimize(
+        data=data,
+        strategy_name=strategy_name,
+        n_iter=n_iter,
+        seed=seed,
+    )
+
+    saved_path = None
+    if save_params:
+        saved_file = save_optimal_params(
+            ticker=ticker,
+            strategy_name=strategy_name,
+            strategy_params=result.best_strategy_params,
+            risk_params=result.best_risk_params,
+            metrics=result.optimized_out_of_sample,
+        )
+        saved_path = str(saved_file)
+
+    report = result.to_dict()
+    report["ticker"] = ticker
+    report["saved_to"] = saved_path
+    return report

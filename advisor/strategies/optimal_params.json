@@ -1,0 +1,34 @@
+{
+  "AAPL": {
+    "ma_rsi": {
+      "strategy_params": {
+        "short_ema_period": 19,
+        "long_ema_period": 29,
+        "rsi_period": 11,
+        "rsi_oversold": 24.0,
+        "rsi_overbought": 66.0
+      },
+      "risk_params": {
+        "stop_loss_pct": 0.05,
+        "take_profit_pct": 0.1,
+        "trailing_stop": true,
+        "max_hold_bars": 60
+      },
+      "metrics": {
+        "total_return_pct": 6.83,
+        "annualized_return_pct": 2281981703273710.0,
+        "sharpe_ratio": 1.798,
+        "max_drawdown_pct": -3.82,
+        "win_rate_pct": 100.0,
+        "profit_factor": Infinity,
+        "expectancy_pct": 7.01,
+        "n_trades": 1,
+        "trade_returns": [
+          0.07007022442760523
+        ],
+        "skipped_buys_due_to_cash": 0
+      },
+      "updated_at": "2026-10-26T12:26:32.222056"
+    }
+  }
+}

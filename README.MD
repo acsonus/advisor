@@ -152,6 +152,30 @@ Manages positions using an **ATR-based trailing stop**. Enters long when price r
 A **long-only backtest engine** that replays any `Buy/Sell/Hold` signal column over historical prices. Supports:
 - Transaction fees + slippage (in basis points)
 - Optional cash-constrained mode (buys whole shares from a starting capital)
-- Stop-loss, take-profit, and max-hold-bars exits
+- Stop-loss, take-profit, trailing stop, and max-hold-bars exits
 - Returns a dict of performance metrics: total return, CAGR, Sharpe ratio, max drawdown, win rate, profit factor, expectancy, and per-trade returns.
+
+---
+
+## Strategy Optimization & Risk Management
+
+### CLI Runner: `optimize_strategy.py`
+Automated hyperparameter and exit criteria optimization using randomized parameter search with holdout train/test validation and risk-adjusted fitness scoring (Sharpe + Profit Factor with max drawdown constraint):
+
+```bash
+# Optimize MA-RSI strategy on AAPL with 50 trials
+python optimize_strategy.py --ticker AAPL --strategy ma_rsi --period 1y -n 50
+
+# Optimize MACD histogram reversal on MSFT over 2 years
+python optimize_strategy.py --ticker MSFT --strategy macd_histogram_reversal --period 2y -n 100
+
+# Run without saving parameters to optimal_params.json
+python optimize_strategy.py --ticker TSLA --strategy bollinger_squeeze --no-save
+```
+
+### REST API: `/api/strategies/optimize`
+```http
+GET /api/strategies/optimize?ticker=AAPL&strategy=ma_rsi&period=1y&iterations=50
+```
+Runs the optimization pipeline and returns winning parameters, train vs test metrics, baseline comparisons, and persists winning parameters to `advisor/strategies/optimal_params.json` for automatic reuse by `/api/strategies/simulate?use_optimal=true`.
 

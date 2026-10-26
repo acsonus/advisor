@@ -267,6 +267,75 @@ def run_simulation_for_ticker(
     }
 
 
+def optimize_strategy_on_dataframe(
+    data: pd.DataFrame,
+    ticker: str,
+    strategy_name: str,
+    n_iter: int = 50,
+    initial_cash: float = 10000.0,
+    commission_bps: float = 0.0,
+    save_params: bool = True,
+    seed: int | None = 42,
+) -> dict:
+    """
+    Execute systematic parameter search and risk limit optimization on an OHLCV DataFrame.
+
+    Parameters:
+    -----------
+    data : pd.DataFrame
+        Clean OHLCV price bars.
+    ticker : str
+        Symbol identifier.
+    strategy_name : str
+        Strategy name registered in StrategyRegistry.
+    n_iter : int, default 50
+        Number of randomized parameter configurations to test.
+    initial_cash : float, default 10000.0
+        Account starting capital.
+    commission_bps : float, default 0.0
+        Trading fee in basis points.
+    save_params : bool, default True
+        Whether to persist winning parameters to optimal_params.json.
+    seed : int, optional, default 42
+        Random seed for reproducible parameter sampling.
+
+    Returns:
+    --------
+    dict
+        Structured optimization report.
+    """
+    if data.empty:
+        raise ValueError("Cannot optimize on empty DataFrame.")
+
+    optimizer = StrategyOptimizer(
+        initial_cash=initial_cash,
+        commission_bps=commission_bps,
+    )
+
+    result = optimizer.optimize(
+        data=data,
+        strategy_name=strategy_name,
+        n_iter=n_iter,
+        seed=seed,
+    )
+
+    saved_path = None
+    if save_params:
+        saved_file = save_optimal_params(
+            ticker=ticker,
+            strategy_name=strategy_name,
+            strategy_params=result.best_strategy_params,
+            risk_params=result.best_risk_params,
+            metrics=result.optimized_out_of_sample,
+        )
+        saved_path = str(saved_file)
+
+    report = result.to_dict()
+    report["ticker"] = ticker
+    report["saved_to"] = saved_path
+    return report
+
+
 def optimize_strategy_for_ticker(
     ticker: str,
     strategy_name: str,
@@ -321,30 +390,13 @@ def optimize_strategy_for_ticker(
             f"No data returned for '{ticker}' with period='{period}' and interval='{interval}'."
         )
 
-    optimizer = StrategyOptimizer(
-        initial_cash=initial_cash,
-        commission_bps=commission_bps,
-    )
-
-    result = optimizer.optimize(
+    return optimize_strategy_on_dataframe(
         data=data,
+        ticker=ticker,
         strategy_name=strategy_name,
         n_iter=n_iter,
+        initial_cash=initial_cash,
+        commission_bps=commission_bps,
+        save_params=save_params,
         seed=seed,
     )
-
-    saved_path = None
-    if save_params:
-        saved_file = save_optimal_params(
-            ticker=ticker,
-            strategy_name=strategy_name,
-            strategy_params=result.best_strategy_params,
-            risk_params=result.best_risk_params,
-            metrics=result.optimized_out_of_sample,
-        )
-        saved_path = str(saved_file)
-
-    report = result.to_dict()
-    report["ticker"] = ticker
-    report["saved_to"] = saved_path
-    return report

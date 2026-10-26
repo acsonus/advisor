@@ -7,6 +7,7 @@ from advisor.data.constants import (
     VALID_PERIODS,
 )
 from advisor.data.fetcher import download_data, downloadData
+from advisor.data.loader import load_historical_dump, load_metatrader_dump
 from advisor.data.normalizers import to_naive_s
 from advisor.data.validator import validate_period_and_interval, validate_ticker
 
@@ -26,4 +27,6 @@ __all__ = [
     "validate_ticker",
     "download_data",
     "downloadData",
+    "load_historical_dump",
+    "load_metatrader_dump",
 ]

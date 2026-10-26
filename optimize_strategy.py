@@ -13,8 +13,13 @@ import argparse
 import json
 import sys
 
+from pathlib import Path
+from advisor.data.loader import load_historical_dump
 from advisor.data.validator import validate_period_and_interval, validate_ticker
-from advisor.services.orchestrator import optimize_strategy_for_ticker
+from advisor.services.orchestrator import (
+    optimize_strategy_for_ticker,
+    optimize_strategy_on_dataframe,
+)
 from advisor.strategies.registry import StrategyRegistry
 
 
@@ -38,7 +43,20 @@ def main():
         "--ticker",
         type=str,
         default="AAPL",
-        help="Stock ticker symbol (e.g. AAPL, MSFT, TSLA). Default: AAPL.",
+        help="Stock ticker symbol (e.g. AAPL, EURUSD, BTCUSD). Default: AAPL.",
+    )
+    parser.add_argument(
+        "--data-file",
+        type=str,
+        default=None,
+        help="Path to historical market data dump (MetaTrader 4/5 CSV/TXT, TradingView, or generic CSV).",
+    )
+    parser.add_argument(
+        "--format",
+        type=str,
+        default="auto",
+        choices=["auto", "metatrader", "generic"],
+        help="Data dump format. Default: auto (detects MetaTrader <DATE> or standard CSV).",
     )
     parser.add_argument(
         "--strategy",
@@ -51,7 +69,7 @@ def main():
         "--period",
         type=str,
         default="1y",
-        help="Historical duration to download (e.g. 6mo, 1y, 2y). Default: 1y.",
+        help="Historical duration to download from Yahoo if --data-file is omitted. Default: 1y.",
     )
     parser.add_argument(
         "--interval",
@@ -97,32 +115,65 @@ def main():
 
     args = parser.parse_args()
 
-    try:
-        ticker = validate_ticker(args.ticker)
-        validate_period_and_interval(args.period, args.interval)
-    except ValueError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    if args.data_file:
+        file_path = Path(args.data_file)
+        if not file_path.is_file():
+            print(f"Error: Data file not found: {file_path}", file=sys.stderr)
+            sys.exit(1)
 
-    print(f"\n[+] Running optimization for {ticker} ({args.strategy})...")
-    print(f"    Timeframe: period={args.period}, interval={args.interval}")
-    print(f"    Search budget: {args.iterations} trials, capital: ${args.cash:,.2f}")
+        ticker = args.ticker if args.ticker != "AAPL" else file_path.stem.upper()
+        print(f"\n[+] Loading MetaTrader / platform dump from {file_path} (format={args.format})...")
+        try:
+            data = load_historical_dump(file_path, source=args.format)
+        except Exception as exc:
+            print(f"Error loading historical dump: {exc}", file=sys.stderr)
+            sys.exit(1)
 
-    try:
-        report = optimize_strategy_for_ticker(
-            ticker=ticker,
-            strategy_name=args.strategy,
-            period=args.period,
-            interval=args.interval,
-            n_iter=args.iterations,
-            initial_cash=args.cash,
-            commission_bps=args.commission_bps,
-            save_params=not args.no_save,
-            seed=args.seed,
-        )
-    except Exception as exc:
-        print(f"\n[!] Optimization failed: {exc}", file=sys.stderr)
-        sys.exit(1)
+        print(f"    Loaded {len(data)} bars from {data.index[0]} to {data.index[-1]}")
+        print(f"[+] Running optimization for {ticker} ({args.strategy})...")
+        print(f"    Search budget: {args.iterations} trials, capital: ${args.cash:,.2f}")
+
+        try:
+            report = optimize_strategy_on_dataframe(
+                data=data,
+                ticker=ticker,
+                strategy_name=args.strategy,
+                n_iter=args.iterations,
+                initial_cash=args.cash,
+                commission_bps=args.commission_bps,
+                save_params=not args.no_save,
+                seed=args.seed,
+            )
+        except Exception as exc:
+            print(f"\n[!] Optimization failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        try:
+            ticker = validate_ticker(args.ticker)
+            validate_period_and_interval(args.period, args.interval)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"\n[+] Running optimization for {ticker} ({args.strategy})...")
+        print(f"    Timeframe: period={args.period}, interval={args.interval}")
+        print(f"    Search budget: {args.iterations} trials, capital: ${args.cash:,.2f}")
+
+        try:
+            report = optimize_strategy_for_ticker(
+                ticker=ticker,
+                strategy_name=args.strategy,
+                period=args.period,
+                interval=args.interval,
+                n_iter=args.iterations,
+                initial_cash=args.cash,
+                commission_bps=args.commission_bps,
+                save_params=not args.no_save,
+                seed=args.seed,
+            )
+        except Exception as exc:
+            print(f"\n[!] Optimization failed: {exc}", file=sys.stderr)
+            sys.exit(1)
 
     if args.json:
         print(json.dumps(report, indent=2))

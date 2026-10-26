@@ -16,6 +16,8 @@ from advisor.data import (
     _PERIOD_DAYS,
     download_data,
     downloadData,
+    load_historical_dump,
+    load_metatrader_dump,
     to_naive_s,
     validate_period_and_interval,
     validate_ticker,
@@ -66,6 +68,8 @@ __all__ = [
     "to_naive_s",
     "download_data",
     "downloadData",
+    "load_historical_dump",
+    "load_metatrader_dump",
     "validate_period_and_interval",
     "validate_ticker",
     # Sentiment

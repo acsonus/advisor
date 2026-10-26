@@ -169,8 +169,24 @@ python optimize_strategy.py --ticker AAPL --strategy ma_rsi --period 1y -n 50
 # Optimize MACD histogram reversal on MSFT over 2 years
 python optimize_strategy.py --ticker MSFT --strategy macd_histogram_reversal --period 2y -n 100
 
+# Optimize using your MetaTrader 4 / MetaTrader 5 historical data export
+python optimize_strategy.py --data-file /path/to/EURUSD_H1.csv --strategy ma_rsi -n 50
+
 # Run without saving parameters to optimal_params.json
 python optimize_strategy.py --ticker TSLA --strategy bollinger_squeeze --no-save
+```
+
+### Loading MetaTrader Dumps in Python
+```python
+from advisor.data import load_metatrader_dump
+from advisor.optimization import StrategyOptimizer
+
+# Load MT4 / MT5 export (tab or comma separated, with or without <TAGS>)
+df = load_metatrader_dump("EURUSD_H1.txt")
+
+# Run optimizer on your platform data
+optimizer = StrategyOptimizer()
+result = optimizer.optimize(df, strategy_name="ma_rsi", n_iter=50)
 ```
 
 ### REST API: `/api/strategies/optimize`

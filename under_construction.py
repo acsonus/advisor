@@ -67,47 +67,48 @@ def identify_gap_fills(df, min_volume=None):
 
     return df
 
-# Example Usage: Download real data from yfinance
+if __name__ == "__main__":
+    # Example Usage: Download real data from yfinance
 
-# Download historical data (1h interval)
-ticker = "AAPL"
-start_date = "2026-05-01"
-end_date = "2026-05-21"
-interval = "1h"
+    # Download historical data (1h interval)
+    ticker = "AAPL"
+    start_date = "2026-05-01"
+    end_date = "2026-05-21"
+    interval = "1h"
 
-df = yf.download(ticker, start=start_date, end=end_date, progress=False, interval=interval)
+    df = yf.download(ticker, start=start_date, end=end_date, progress=False, interval=interval)
 
-# Flatten MultiIndex columns returned by newer yfinance versions
-if isinstance(df.columns, pd.MultiIndex):
-    df.columns = df.columns.get_level_values(0)
+    # Flatten MultiIndex columns returned by newer yfinance versions
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
 
-# Ensure required columns are present
-df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
-df = convert_index_to_athens(df)
+    # Ensure required columns are present
+    df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
+    df = convert_index_to_athens(df)
 
-result = identify_gap_fills(df)
-print(result)
+    result = identify_gap_fills(df)
+    print(result)
 
-# --- Chart ---
-# Build addplot markers for filled gaps
-filled_up   = result['Low'].where((result['Gap_Type'] == 'Up')   & result['Filled'])
-filled_down = result['High'].where((result['Gap_Type'] == 'Down') & result['Filled'])
+    # --- Chart ---
+    # Build addplot markers for filled gaps
+    filled_up   = result['Low'].where((result['Gap_Type'] == 'Up')   & result['Filled'])
+    filled_down = result['High'].where((result['Gap_Type'] == 'Down') & result['Filled'])
 
-apds = []
-if filled_up.notna().any():
-    apds.append(mpf.make_addplot(filled_up, type='scatter', markersize=60, marker='^', color='green'))
-if filled_down.notna().any():
-    apds.append(mpf.make_addplot(filled_down, type='scatter', markersize=60, marker='v', color='red'))
+    apds = []
+    if filled_up.notna().any():
+        apds.append(mpf.make_addplot(filled_up, type='scatter', markersize=60, marker='^', color='green'))
+    if filled_down.notna().any():
+        apds.append(mpf.make_addplot(filled_down, type='scatter', markersize=60, marker='v', color='red'))
 
-mpf.plot(
-    result[['Open', 'High', 'Low', 'Close', 'Volume']],
-    type='candle',
-    style='charles',
-    title=f'{ticker} – Gap Fills {start_date} to {end_date} ({interval})',
-    ylabel='Price (USD)',
-    volume=True,
-    addplot=apds if apds else None,
-    figsize=(16, 8),
-    show_nontrading=False,
-)
+    mpf.plot(
+        result[['Open', 'High', 'Low', 'Close', 'Volume']],
+        type='candle',
+        style='charles',
+        title=f'{ticker} – Gap Fills {start_date} to {end_date} ({interval})',
+        ylabel='Price (USD)',
+        volume=True,
+        addplot=apds if apds else None,
+        figsize=(16, 8),
+        show_nontrading=False,
+    )
 

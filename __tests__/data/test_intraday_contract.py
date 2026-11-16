@@ -292,8 +292,7 @@ class TestStrategyCompatibilityIntraday:
             1. Download AAPL 5m bars for 1mo period.
             2. Drop rows with NaNs and return clean DataFrame.
         """
-        df = download_data(TICKER, period="1mo", interval="5m")
-        df.dropna(inplace=True)
+        df = download_data(TICKER, period="1mo", interval="5m").dropna()
         return df
 
     @pytest.fixture(scope="class")
@@ -307,8 +306,7 @@ class TestStrategyCompatibilityIntraday:
             1. Download AAPL 1h bars for 1y period.
             2. Drop rows with NaNs and return clean DataFrame.
         """
-        df = download_data(TICKER, period="1y", interval="1h")
-        df.dropna(inplace=True)
+        df = download_data(TICKER, period="1y", interval="1h").dropna()
         return df
 
     def test_atr_trailing_stop_5m_no_error(self, data_5m):

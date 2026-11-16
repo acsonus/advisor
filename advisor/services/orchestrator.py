@@ -81,8 +81,7 @@ def run_strategies_pipeline(
     ValueError
         If no data is returned or data has fewer than 27 bars.
     """
-    data = download_data(ticker, period=period, interval=interval)
-    data.dropna(inplace=True)
+    data = download_data(ticker, period=period, interval=interval).dropna()
 
     if data.empty:
         raise ValueError(
@@ -199,8 +198,7 @@ def run_simulation_for_ticker(
     dict
         Dictionary containing ticker symbol, bar count, and strategy performance metrics.
     """
-    data = download_data(ticker, period=period, interval=interval)
-    data.dropna(inplace=True)
+    data = download_data(ticker, period=period, interval=interval).dropna()
 
     if data.empty:
         raise ValueError(
@@ -382,8 +380,7 @@ def optimize_strategy_for_ticker(
         Structured optimization report including best parameters, in-sample vs
         out-of-sample metrics, baseline comparison, and top trials.
     """
-    data = download_data(ticker, period=period, interval=interval)
-    data.dropna(inplace=True)
+    data = download_data(ticker, period=period, interval=interval).dropna()
 
     if data.empty:
         raise ValueError(

@@ -38,7 +38,7 @@ def test_visual_pipeline_smoke():
     sentiments.downloadYahooNews(ticker)
     df_news = sentiments.analyze_news()
 
-    data.dropna(inplace=True)
+    data = data.dropna()
     data['atr_signal'] = atr_trailing_stop(data)['Signal']
     data['ma_rsi_signal'] = ma_rsi_strategy(data)['Signal']
 

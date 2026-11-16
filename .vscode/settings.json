@@ -1,7 +1,22 @@
 {
     "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
     "python.testing.pytestArgs": [
-        "__tests__"
+        "__tests__",
+        "-m",
+        "not live"
     ],
-    "python.useEnvironmentsExtension": true
+    "files.exclude": {
+        "**/.DS_Store": true,
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/.pytest_cache": true,
+        "**/.ruff_cache": true
+    },
+    "search.exclude": {
+        "**/__pycache__": true,
+        "**/.pytest_cache": true,
+        "**/.ruff_cache": true,
+        ".venv": true
+    }
 }

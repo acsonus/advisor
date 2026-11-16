@@ -43,7 +43,7 @@ __all__ = [
 ]
 
 if __name__ == '__main__':
-    from sentiments import YahooSentiments
+    from Sentiments import YahooSentiments
     import trading_strategy as TradingStrategy
 
     ticker = sys.argv[1] if len(sys.argv) > 1 else 'COKE'
@@ -58,7 +58,7 @@ if __name__ == '__main__':
     sentiments.downloadYahooNews(ticker)
     df_news = sentiments.analyze_news()
 
-    data.dropna(inplace=True)
+    data = data.dropna()
     data['atr_signal'] = TradingStrategy.atr_trailing_stop(data)['Signal']
     data['ma_rsi_signal'] = TradingStrategy.ma_rsi_strategy(data)['Signal']
 

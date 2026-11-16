@@ -37,8 +37,7 @@ class TestRealMarketData:
             4. Verify row count meets `_LIVE_MIN_BARS` threshold or skip.
         """
         try:
-            df = download_data(ticker, period="1mo", interval="1d")
-            df.dropna(inplace=True)
+            df = download_data(ticker, period="1mo", interval="1d").dropna()
         except Exception as exc:
             pytest.skip(f"Could not download data for '{ticker}': {exc}")
 

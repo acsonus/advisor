@@ -1,0 +1,76 @@
+{
+    "name": "Advisor Python Dev",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    "remoteUser": "vscode",
+    "containerEnv": {
+        "PYTHONPATH": "${containerWorkspaceFolder}",
+        "PORT": "5050",
+        "MPLBACKEND": "Agg",
+        "HF_HOME": "/home/vscode/.cache/huggingface"
+    },
+    "forwardPorts": [
+        5050
+    ],
+    "portsAttributes": {
+        "5050": {
+            "label": "Advisor Flask API",
+            "onAutoForward": "notify"
+        }
+    },
+    "mounts": [
+        "source=advisor-huggingface-cache,target=/home/vscode/.cache/huggingface,type=volume",
+        "source=advisor-venv,target=${containerWorkspaceFolder}/.venv,type=volume"
+    ],
+    "postCreateCommand": "/opt/venv/bin/pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-python.debugpy",
+                "charliermarsh.ruff",
+                "ms-toolsai.jupyter",
+                "bierner.markdown-mermaid"
+            ],
+            "settings": {
+                "python.defaultInterpreterPath": "/opt/venv/bin/python",
+                "python.terminal.activateEnvironment": true,
+                "python.testing.pytestEnabled": true,
+                "python.testing.unittestEnabled": false,
+                "python.testing.cwd": "${containerWorkspaceFolder}",
+                "python.testing.pytestPath": "/opt/venv/bin/pytest",
+                "python.testing.pytestArgs": [
+                    "__tests__",
+                    "-m",
+                    "not live"
+                ],
+                "files.exclude": {
+                    "**/.git": true,
+                    "**/.DS_Store": true,
+                    "**/__pycache__": true,
+                    "**/*.pyc": true,
+                    "**/.pytest_cache": true,
+                    "**/.ruff_cache": true,
+                    ".venv": true
+                },
+                "search.exclude": {
+                    "**/__pycache__": true,
+                    "**/.pytest_cache": true,
+                    "**/.ruff_cache": true,
+                    ".venv": true
+                },
+                "editor.formatOnSave": true,
+                "[python]": {
+                    "editor.defaultFormatter": "charliermarsh.ruff",
+                    "editor.codeActionsOnSave": {
+                        "source.organizeImports": "explicit"
+                    }
+                }
+            }
+        }
+    }
+}
+

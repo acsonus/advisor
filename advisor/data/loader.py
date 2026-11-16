@@ -76,7 +76,7 @@ def load_metatrader_dump(filepath: str | Path) -> pd.DataFrame:
         for col in df.columns:
             clean_name = re.sub(r"[<>\s]", "", str(col)).upper()
             clean_col_map[col] = clean_name
-        df.rename(columns=clean_col_map, inplace=True)
+        df = df.rename(columns=clean_col_map)
     else:
         # Headerless MT4 raw format
         first_row_len = len(first_line_tokens)
@@ -112,14 +112,13 @@ def load_metatrader_dump(filepath: str | Path) -> pd.DataFrame:
         dt_strings = df[date_col].str.replace(".", "-", regex=False)
 
     df["Date"] = pd.to_datetime(dt_strings, errors="coerce")
-    df.dropna(subset=["Date"], inplace=True)
+    df = df.dropna(subset=["Date"])
 
     # Normalize tz
     if getattr(df["Date"].dtype, "tz", None) is not None:
         df["Date"] = df["Date"].dt.tz_localize(None)
 
-    df.set_index("Date", inplace=True)
-    df.sort_index(inplace=True)
+    df = df.set_index("Date").sort_index()
 
     # Map OHLCV columns
     std_map = {}
@@ -137,7 +136,7 @@ def load_metatrader_dump(filepath: str | Path) -> pd.DataFrame:
             if "Volume" not in std_map.values():
                 std_map[col] = "Volume"
 
-    df.rename(columns=std_map, inplace=True)
+    df = df.rename(columns=std_map)
 
     if "Close" not in df.columns:
         raise ValueError(
@@ -159,7 +158,7 @@ def load_metatrader_dump(filepath: str | Path) -> pd.DataFrame:
     if "Volume" not in df.columns:
         df["Volume"] = 1.0
 
-    df.dropna(subset=["Close"], inplace=True)
+    df = df.dropna(subset=["Close"])
     return df[["Open", "High", "Low", "Close", "Volume"]]
 
 
@@ -186,8 +185,7 @@ def load_historical_dump(filepath: str | Path, source: str = "auto") -> pd.DataF
     date_col = next((c for c in df.columns if c.lower() in ("date", "time", "timestamp", "datetime")), None)
     if date_col:
         df["Date"] = pd.to_datetime(df[date_col], errors="coerce")
-        df.dropna(subset=["Date"], inplace=True)
-        df.set_index("Date", inplace=True)
+        df = df.dropna(subset=["Date"]).set_index("Date")
 
     # Standardize column names
     col_map = {
@@ -195,11 +193,10 @@ def load_historical_dump(filepath: str | Path, source: str = "auto") -> pd.DataF
         for c in df.columns
         if c.lower() in ("open", "high", "low", "close", "volume")
     }
-    df.rename(columns=col_map, inplace=True)
+    df = df.rename(columns=col_map)
     for c in ["Open", "High", "Low", "Close", "Volume"]:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
 
-    df.dropna(subset=["Close"], inplace=True)
-    df.sort_index(inplace=True)
+    df = df.dropna(subset=["Close"]).sort_index()
     return df

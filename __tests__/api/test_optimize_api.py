@@ -109,3 +109,32 @@ def test_simulate_with_use_optimal_flag(client):
             commission_bps=0.0,
             use_optimal_params=True,
         )
+
+
+def test_run_simulation_for_ticker_all_registered_strategies():
+    """Verify run_simulation_for_ticker resolves and runs all 5 core strategies."""
+    from advisor.services.orchestrator import run_simulation_for_ticker
+    from utilities.test_helpers import make_ohlcv, sine_wave
+
+    synthetic_df = make_ohlcv(sine_wave(60))
+
+    with patch("advisor.services.orchestrator.download_data", return_value=synthetic_df):
+        result = run_simulation_for_ticker(
+            ticker="AAPL",
+            period="3mo",
+            interval="1d",
+            initial_cash=10000.0,
+            commission_bps=5.0,
+            use_optimal_params=False,
+        )
+
+    assert result["ticker"] == "AAPL"
+    assert result["bars"] == 60
+    expected_strategies = {
+        "atr_trailing_stop",
+        "ma_rsi",
+        "bollinger_squeeze",
+        "macd_histogram_reversal",
+        "vwap_cross",
+    }
+    assert set(result["strategies"].keys()) == expected_strategies

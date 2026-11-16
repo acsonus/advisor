@@ -91,7 +91,7 @@ def get_default_strategy_space(strategy_name: str) -> ParameterSpace:
             risk_params=risk_space,
         )
 
-    if strategy_name == "vwap_cross":
+    if strategy_name in ("vwap", "vwap_cross"):
         return ParameterSpace(
             strategy_params={},
             risk_params=risk_space,
